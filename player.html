@@ -20,7 +20,6 @@
   <script>
     const id = new URLSearchParams(location.search).get("id") || "";
     const page = document.getElementById("page");
-    const PROVISIONAL_HINT = "Ratings are Provisional until a player has completed ten matches in the associated format. Provisional ratings are subject to double the loss and gain of rating points.";
     let names = {}, mine = [], chartLadder = null, historyFilter = "All", newestFirst = true, h2hQuery = "";
 
     Promise.all([loadAllLadders(), loadMatches()]).then(([ladders, matches]) => {
@@ -50,7 +49,7 @@
         const p = ladders[l].find(x => x.id === id);
         if (!p) { html += '<div class="card ladder empty"><h3>' + l + '</h3><div class="big">No matches yet</div></div>'; return; }
         html += '<div class="card ladder"><h3>' + l + '</h3>' +
-          '<div class="big">' + p.elo + (p.provisional ? '<span class="tag hint" tabindex="0" aria-label="Provisional rating" data-hint="' + PROVISIONAL_HINT + '">P</span>' : '') + '</div>' +
+          '<div class="big">' + p.elo + '</div>' +
           '<div class="rankline">Rank ' + p.rank + ' of ' + ladders[l].length + '</div>' +
           '<dl><dt>Matches</dt><dd>' + p.mw + '–' + p.ml + (p.md ? '–' + p.md : '') + '</dd>' +
           '<dt>Games</dt><dd>' + p.gw + '–' + p.gl + '</dd>' +
