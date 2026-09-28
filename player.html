@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Player Profile</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <h1><a href="./">MTGA Eternal Leaderboard</a></h1>
+    </header>
+    <a class="back" href="./" id="back">← Back to leaderboard</a>
+    <div id="page"><div class="loading">Loading…</div></div>
+    <footer class="site">Updates a few minutes after results are entered.</footer>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const id = new URLSearchParams(location.search).get("id") || "";
+    const page = document.getElementById("page");
+    let names = {}, mine = [], chartLadder = null, historyFilter = "All";
+
+    Promise.all([loadAllLadders(), loadMatches()]).then(([ladders, matches]) => {
+      LADDERS.forEach(l => ladders[l].forEach(p => { names[p.id] = p.name; }));
+      mine = matches.filter(m => m.p1 === id || m.p2 === id).map(m => perspective(m, id));
+      if (!mine.length) {
+        page.innerHTML = '<div class="card notice">No matches found for “' + esc(id) + '”.</div>';
+        return;
+      }
+      const display = names[id] || id;
+      document.title = display + " · MTGA Eternal Leaderboard";
+
+      const onLadder = l => l === "Eternal" ? mine : mine.filter(x => x.match.format === l);
+      const played = LADDERS.filter(l => onLadder(l).length);
+      chartLadder = played.includes("Eternal") ? "Eternal" : played[0];
+
+      // ---------- header + ladder cards ----------
+      const first = mine[0].match.date;
+      const eventWins = mine.filter(x => x.match.finals && x.result === "W").length;
+      let html =
+        '<div class="player-head"><h1>' + esc(display) + '</h1>' +
+        '<div class="meta">' + (display !== id ? esc(id) + ' · ' : '') +
+        mine.length + ' matches · debut ' + fmtDate(first) +
+        (eventWins ? ' · <span class="trophy">' + eventWins + ' event win' + (eventWins > 1 ? 's' : '') + '</span>' : '') +
+        '</div></div><div class="ladders">';
+      LADDERS.forEach(l => {
+        const p = ladders[l].find(x => x.id === id);
+        if (!p) { html += '<div class="card ladder empty"><h3>' + l + '</h3><div class="big">No matches yet</div></div>'; return; }
+        html += '<div class="card ladder"><h3>' + l + '</h3>' +
+          '<div class="big">' + p.elo + (p.provisional ? '<span class="tag" title="Provisional">P</span>' : '') + '</div>' +
+          '<div class="rankline">Rank ' + p.rank + ' of ' + ladders[l].length + '</div>' +
+          '<dl><dt>Matches</dt><dd>' + p.mw + '–' + p.ml + (p.md ? '–' + p.md : '') + '</dd>' +
+          '<dt>Games</dt><dd>' + p.gw + '–' + p.gl + '</dd>' +
+          '<dt>Event wins</dt><dd>' + (p.ew ? '<span class="trophy">' + p.ew + '</span>' : '0') + '</dd></dl></div>';
+      });
+      html += '</div>';
+
+      // ---------- chart ----------
+      html += '<section class="block"><h2>Rating history' +
+        (played.length > 1 ? '<div class="seg small" id="chartTabs">' + played.map(l => '<button data-l="' + l + '">' + l + '</button>').join("") + '</div>' : '<span class="sub" style="color:var(--muted);font-size:.85rem;font-weight:400">' + played[0] + '</span>') +
+        '</h2><div class="card chart" id="chart"></div></section>';
+
+      // ---------- history ----------
+      const fmts = ["All"].concat(["Historic", "Timeless"].filter(l => onLadder(l).length));
+      html += '<section class="block"><h2>Match history' +
+        (fmts.length > 2 ? '<div class="seg small" id="histTabs">' + fmts.map(f => '<button data-f="' + f + '">' + f + '</button>').join("") + '</div>' : '') +
+        '</h2><div class="card"><div class="table-wrap" id="history"></div></div></section>';
+
+      // ---------- head to head ----------
+      html += '<section class="block"><h2>Head-to-head</h2><div class="card"><div class="table-wrap">' + h2hTable() + '</div></div></section>';
+
+      page.innerHTML = html;
+
+      const chartTabs = document.getElementById("chartTabs");
+      if (chartTabs) chartTabs.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { chartLadder = b.dataset.l; drawChart(); } });
+      const histTabs = document.getElementById("histTabs");
+      if (histTabs) histTabs.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { historyFilter = b.dataset.f; drawHistory(); } });
+      drawChart(); drawHistory();
+      window.addEventListener("resize", drawChart);
+
+      function drawHistory() {
+        if (histTabs) histTabs.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.f === historyFilter ? "true" : "false"));
+        const rows = mine.filter(x => historyFilter === "All" || x.match.format === historyFilter).slice().reverse();
+        document.getElementById("history").innerHTML =
+          '<table><thead><tr><th class="l">Date</th><th class="l hide-sm">Event</th><th class="l">Opponent</th><th class="l">Result</th>' +
+          '<th>Format</th><th class="hide-sm">Eternal</th></tr></thead><tbody>' +
+          rows.map(x => {
+            const fd = x.fmtAfter - x.fmtBefore, ed = x.eteAfter - x.eteBefore, m = x.match;
+            return '<tr><td class="l dim"><span class="hide-sm">' + fmtDate(m.date) + '</span><span class="show-sm">' + fmtShort(m.date) + '</span></td>' +
+              '<td class="l event hide-sm" title="' + esc(m.event) + '">' + esc(m.event) + '</td>' +
+              '<td class="l name"><a href="' + playerUrl(x.opp) + '">' + esc(names[x.opp] || x.opp) + '</a></td>' +
+              '<td class="l"><span class="res ' + x.result + '">' + x.result + '</span> ' + x.my + '–' + x.their +
+                (m.finals ? '<span class="tag final"><span class="hide-sm">FINAL</span><span class="show-sm">F</span></span>' : '') + '</td>' +
+              '<td><span class="' + deltaClass(fd) + '">' + signed(fd) + '</span> <span class="dim hide-sm">' + x.fmtAfter + '</span>' +
+                ' <span class="tag hide-sm">' + m.format.charAt(0) + '</span></td>' +
+              '<td class="hide-sm"><span class="' + deltaClass(ed) + '">' + signed(ed) + '</span> <span class="dim hide-sm">' + x.eteAfter + '</span></td></tr>';
+          }).join("") + '</tbody></table>';
+      }
+
+      function h2hTable() {
+        const by = {};
+        mine.forEach(x => {
+          const o = by[x.opp] || (by[x.opp] = { id: x.opp, n: 0, W: 0, L: 0, D: 0, gw: 0, gl: 0 });
+          o.n++; o[x.result]++; o.gw += x.my; o.gl += x.their;
+        });
+        const list = Object.values(by).sort((a, b) => b.n - a.n || (names[a.id] || a.id).localeCompare(names[b.id] || b.id));
+        return '<table><thead><tr><th class="l">Opponent</th><th>Played</th><th>W</th><th>L</th><th>D</th><th class="hide-sm">Games</th></tr></thead><tbody>' +
+          list.map(o => '<tr><td class="l name"><a href="' + playerUrl(o.id) + '">' + esc(names[o.id] || o.id) + '</a></td>' +
+            '<td>' + o.n + '</td><td class="up">' + o.W + '</td><td class="down">' + o.L + '</td><td class="' + (o.D ? '' : 'zero') + '">' + o.D + '</td>' +
+            '<td class="hide-sm dim">' + o.gw + '–' + o.gl + '</td></tr>').join("") + '</tbody></table>';
+      }
+
+      function drawChart() {
+        if (chartTabs) chartTabs.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.l === chartLadder ? "true" : "false"));
+        const box = document.getElementById("chart");
+        const pts = onLadder(chartLadder).map(x => chartLadder === "Eternal"
+          ? { x, before: x.eteBefore, after: x.eteAfter }
+          : { x, before: x.fmtBefore, after: x.fmtAfter });
+        // Start point = rating before the first match, then one point per match.
+        const vals = [pts[0].before].concat(pts.map(p => p.after));
+        const W = box.clientWidth - 16, H = 260, padL = 44, padR = 12, padT = 10, padB = 26;
+        let lo = Math.min(...vals), hi = Math.max(...vals);
+        const span = Math.max(hi - lo, 40); lo = Math.floor((lo - span * 0.12) / 10) * 10; hi = Math.ceil((hi + span * 0.12) / 10) * 10;
+        const X = i => padL + (vals.length === 1 ? 0 : i * (W - padL - padR) / (vals.length - 1));
+        const Y = v => padT + (hi - v) * (H - padT - padB) / (hi - lo);
+        const step = [10, 20, 25, 50, 100, 200].find(s => (hi - lo) / s <= 5) || 250;
+        let grid = "", axis = "";
+        for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+          grid += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + Y(v) + '" y2="' + Y(v) + '"/>';
+          axis += '<text x="' + (padL - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+        }
+        const firstD = pts[0].x.match.date, lastD = pts[pts.length - 1].x.match.date;
+        axis += '<text x="' + padL + '" y="' + (H - 6) + '">' + fmtDate(firstD) + '</text>';
+        axis += '<text x="' + (W - padR) + '" y="' + (H - 6) + '" text-anchor="end">' + fmtDate(lastD) + '</text>';
+        const path = vals.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1)).join("");
+        box.innerHTML =
+          '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + chartLadder + ' rating over ' + pts.length + ' matches, from ' + vals[0] + ' to ' + vals[vals.length - 1] + '">' +
+          '<g class="grid">' + grid + '</g><g class="axis">' + axis + '</g>' +
+          '<path class="series" d="' + path + '"/>' +
+          '<line class="cross" id="cross" y1="' + padT + '" y2="' + (H - padB) + '" style="display:none"/>' +
+          '<circle class="dot" id="dot" r="5" style="display:none"/>' +
+          '<rect class="hit" id="hit" x="' + padL + '" y="0" width="' + (W - padL - padR) + '" height="' + H + '"/>' +
+          '</svg><div class="tip" id="tip"></div>';
+        const svg = box.querySelector("svg"), tip = box.querySelector("#tip"), cross = box.querySelector("#cross"), dot = box.querySelector("#dot");
+        function show(evt) {
+          const r = svg.getBoundingClientRect();
+          const mx = (evt.touches ? evt.touches[0].clientX : evt.clientX) - r.left;
+          let i = Math.round((mx - padL) / ((W - padL - padR) / Math.max(vals.length - 1, 1)));
+          i = Math.max(1, Math.min(vals.length - 1, i)); // index 0 is the starting rating, not a match
+          const p = pts[i - 1], x = p.x, d = p.after - p.before;
+          cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.style.display = "";
+          dot.setAttribute("cx", X(i)); dot.setAttribute("cy", Y(vals[i])); dot.style.display = "";
+          tip.innerHTML = '<b>' + p.after + '</b> <span class="' + deltaClass(d) + '">' + signed(d) + '</span><br>' +
+            '<span class="res ' + x.result + '">' + x.result + '</span> ' + x.my + '–' + x.their + ' vs ' + esc(names[x.opp] || x.opp) + '<br>' +
+            '<span class="t2">' + fmtDate(x.match.date) + (chartLadder === "Eternal" ? ' · ' + x.match.format : '') + '</span>';
+          tip.style.opacity = 1;
+          const left = Math.min(Math.max(X(i) + 12, 0), r.width - tip.offsetWidth - 4);
+          tip.style.left = (X(i) + 12 + tip.offsetWidth > r.width ? X(i) - tip.offsetWidth - 12 : left) + "px";
+          tip.style.top = Math.max(Y(vals[i]) - 30, 0) + "px";
+        }
+        function hide() { tip.style.opacity = 0; cross.style.display = "none"; dot.style.display = "none"; }
+        const hit = box.querySelector("#hit");
+        hit.addEventListener("mousemove", show); hit.addEventListener("touchstart", show, { passive: true }); hit.addEventListener("touchmove", show, { passive: true });
+        hit.addEventListener("mouseleave", hide);
+      }
+    }).catch(err => showError(page, err));
+  </script>
+</body>
+</html>

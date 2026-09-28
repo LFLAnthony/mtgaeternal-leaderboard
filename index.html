@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MTGA Eternal Leaderboard</title>
+  <meta name="description" content="Elo leaderboards for Historic, Timeless and Eternal.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <h1><a href="./">MTGA Eternal Leaderboard</a></h1>
+      <span class="sub" id="summary"></span>
+    </header>
+
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Format" id="tabs">
+        <button data-ladder="Historic">Historic</button>
+        <button data-ladder="Timeless">Timeless</button>
+        <button data-ladder="Eternal">Eternal</button>
+      </div>
+      <input class="search" id="search" type="search" placeholder="Find a player…" aria-label="Find a player">
+    </div>
+
+    <div class="card">
+      <div class="table-wrap" id="board"><div class="loading">Loading…</div></div>
+    </div>
+    <p class="legend-note"><span class="tag">P</span> Provisional: fewer than 10 matches on this ladder, so the rating is still settling. Eternal combines Historic and Timeless into its own separate rating.</p>
+
+    <footer class="site">Updates a few minutes after results are entered.</footer>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    let ladders = null;
+    let current = "Eternal";
+    const board = document.getElementById("board");
+    const search = document.getElementById("search");
+
+    function fromHash() {
+      const h = decodeURIComponent(location.hash.slice(1)).toLowerCase();
+      const match = LADDERS.find(l => l.toLowerCase() === h);
+      return match || "Eternal";
+    }
+
+    function render() {
+      document.querySelectorAll("#tabs button").forEach(b =>
+        b.setAttribute("aria-pressed", b.dataset.ladder === current ? "true" : "false"));
+      if (!ladders) return;
+      const q = search.value.trim().toLowerCase();
+      const list = ladders[current].filter(p => !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+      if (!ladders[current].length) { board.innerHTML = '<div class="notice">No ' + esc(current) + ' matches yet.</div>'; return; }
+      if (!list.length) { board.innerHTML = '<div class="notice">No players match “' + esc(search.value) + '”.</div>'; return; }
+      board.innerHTML =
+        '<table><thead><tr>' +
+        '<th class="l">#</th><th class="l">Player</th><th>Elo</th>' +
+        '<th class="hide-sm">Match W</th><th class="hide-sm">Match L</th><th class="show-sm">Record</th><th class="hide-sm">Game W</th><th class="hide-sm">Game L</th>' +
+        '<th><span class="hide-sm">Event Wins</span><span class="show-sm">Events</span></th>' +
+        '</tr></thead><tbody>' +
+        list.map(p =>
+          '<tr class="' + (p.rank <= 3 ? "r" + p.rank : "") + '">' +
+          '<td class="l"><span class="rank">' + p.rank + '</span></td>' +
+          '<td class="l name"><a href="' + playerUrl(p.id) + '">' + esc(p.name) + '</a></td>' +
+          '<td class="elo">' + p.elo + (p.provisional ? '<span class="tag" title="Provisional">P</span>' : '') + '</td>' +
+          '<td class="hide-sm">' + p.mw + '</td><td class="hide-sm">' + p.ml + '</td>' +
+          '<td class="show-sm">' + p.mw + '–' + p.ml + (p.md ? '–' + p.md : '') + '</td>' +
+          '<td class="hide-sm dim">' + p.gw + '</td><td class="hide-sm dim">' + p.gl + '</td>' +
+          '<td>' + (p.ew ? '<span class="trophy">' + p.ew + '</span>' : '<span class="zero">0</span>') + '</td>' +
+          '</tr>').join("") +
+        '</tbody></table>';
+    }
+
+    document.getElementById("tabs").addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      current = b.dataset.ladder;
+      history.replaceState(null, "", "#" + current.toLowerCase());
+      render();
+    });
+    search.addEventListener("input", render);
+    window.addEventListener("hashchange", () => { current = fromHash(); render(); });
+
+    current = fromHash();
+    render();
+    Promise.all([loadAllLadders(), loadMatches()]).then(([l, matches]) => {
+      ladders = l;
+      const last = matches.length ? matches[matches.length - 1].date : null;
+      document.getElementById("summary").textContent =
+        matches.length + " matches" + (last ? " · latest " + fmtDate(last) : "");
+      render();
+    }).catch(err => showError(board, err));
+  </script>
+</body>
+</html>
