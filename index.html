@@ -26,7 +26,7 @@
     <div class="card">
       <div class="table-wrap" id="board"><div class="loading">Loading…</div></div>
     </div>
-    <p class="legend-note"><span class="tag">P</span> Provisional: fewer than 10 matches on this ladder, so the rating is still settling. Eternal combines Historic and Timeless into its own separate rating.</p>
+    <p class="legend-note">Eternal combines Historic and Timeless into its own separate rating.</p>
 
     <footer class="site">Updates a few minutes after results are entered.</footer>
   </div>
@@ -62,7 +62,7 @@
           '<tr class="' + (p.rank <= 3 ? "r" + p.rank : "") + '">' +
           '<td class="l"><span class="rank">' + p.rank + '</span></td>' +
           '<td class="l name"><a href="' + playerUrl(p.id) + '">' + esc(p.name) + '</a></td>' +
-          '<td class="elo">' + p.elo + (p.provisional ? '<span class="tag" title="Provisional">P</span>' : '') + '</td>' +
+          '<td class="elo">' + p.elo + '</td>' +
           '<td class="hide-sm">' + p.mw + '</td><td class="hide-sm">' + p.ml + '</td>' +
           '<td class="show-sm">' + p.mw + '–' + p.ml + (p.md ? '–' + p.md : '') + '</td>' +
           '<td class="hide-sm dim">' + p.gw + '</td><td class="hide-sm dim">' + p.gl + '</td>' +
