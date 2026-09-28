@@ -20,7 +20,8 @@
   <script>
     const id = new URLSearchParams(location.search).get("id") || "";
     const page = document.getElementById("page");
-    let names = {}, mine = [], chartLadder = null, historyFilter = "All";
+    const PROVISIONAL_HINT = "Ratings are Provisional until a player has completed ten matches in the associated format. Provisional ratings are subject to double the loss and gain of rating points.";
+    let names = {}, mine = [], chartLadder = null, historyFilter = "All", newestFirst = true, h2hQuery = "";
 
     Promise.all([loadAllLadders(), loadMatches()]).then(([ladders, matches]) => {
       LADDERS.forEach(l => ladders[l].forEach(p => { names[p.id] = p.name; }));
@@ -49,7 +50,7 @@
         const p = ladders[l].find(x => x.id === id);
         if (!p) { html += '<div class="card ladder empty"><h3>' + l + '</h3><div class="big">No matches yet</div></div>'; return; }
         html += '<div class="card ladder"><h3>' + l + '</h3>' +
-          '<div class="big">' + p.elo + (p.provisional ? '<span class="tag" title="Provisional">P</span>' : '') + '</div>' +
+          '<div class="big">' + p.elo + (p.provisional ? '<span class="tag hint" tabindex="0" aria-label="Provisional rating" data-hint="' + PROVISIONAL_HINT + '">P</span>' : '') + '</div>' +
           '<div class="rankline">Rank ' + p.rank + ' of ' + ladders[l].length + '</div>' +
           '<dl><dt>Matches</dt><dd>' + p.mw + '–' + p.ml + (p.md ? '–' + p.md : '') + '</dd>' +
           '<dt>Games</dt><dd>' + p.gw + '–' + p.gl + '</dd>' +
@@ -69,7 +70,8 @@
         '</h2><div class="card"><div class="table-wrap" id="history"></div></div></section>';
 
       // ---------- head to head ----------
-      html += '<section class="block"><h2>Head-to-head</h2><div class="card"><div class="table-wrap">' + h2hTable() + '</div></div></section>';
+      html += '<section class="block"><h2>Head-to-head<input class="search" id="h2hSearch" type="search" placeholder="Find an opponent…" aria-label="Find an opponent"></h2>' +
+        '<div class="card"><div class="table-wrap" id="h2h"></div></div></section>';
 
       page.innerHTML = html;
 
@@ -77,14 +79,16 @@
       if (chartTabs) chartTabs.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { chartLadder = b.dataset.l; drawChart(); } });
       const histTabs = document.getElementById("histTabs");
       if (histTabs) histTabs.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { historyFilter = b.dataset.f; drawHistory(); } });
-      drawChart(); drawHistory();
+      document.getElementById("h2hSearch").addEventListener("input", e => { h2hQuery = e.target.value.trim().toLowerCase(); drawH2H(); });
+      drawChart(); drawHistory(); drawH2H();
       window.addEventListener("resize", drawChart);
 
       function drawHistory() {
         if (histTabs) histTabs.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.f === historyFilter ? "true" : "false"));
-        const rows = mine.filter(x => historyFilter === "All" || x.match.format === historyFilter).slice().reverse();
+        const rows = mine.filter(x => historyFilter === "All" || x.match.format === historyFilter).slice();
+        if (newestFirst) rows.reverse();
         document.getElementById("history").innerHTML =
-          '<table><thead><tr><th class="l">Date</th><th class="l hide-sm">Event</th><th class="l">Opponent</th><th class="l">Result</th>' +
+          '<table><thead><tr><th class="l"><button class="sort" id="dateSort" aria-label="Sort by date, currently ' + (newestFirst ? 'newest first' : 'oldest first') + '">Date <span aria-hidden="true">' + (newestFirst ? '↓' : '↑') + '</span></button></th><th class="l hide-sm">Event</th><th class="l">Opponent</th><th class="l">Result</th>' +
           '<th>Format</th><th class="hide-sm">Eternal</th></tr></thead><tbody>' +
           rows.map(x => {
             const fd = x.fmtAfter - x.fmtBefore, ed = x.eteAfter - x.eteBefore, m = x.match;
@@ -92,12 +96,15 @@
               '<td class="l event hide-sm" title="' + esc(m.event) + '">' + esc(m.event) + '</td>' +
               '<td class="l name"><a href="' + playerUrl(x.opp) + '">' + esc(names[x.opp] || x.opp) + '</a></td>' +
               '<td class="l"><span class="res ' + x.result + '">' + x.result + '</span> ' + x.my + '–' + x.their +
-                (m.finals ? '<span class="tag final"><span class="hide-sm">FINAL</span><span class="show-sm">F</span></span>' : '') + '</td>' +
+                (m.finals ? '<span class="tag final"><span class="hide-sm">FINALS</span><span class="show-sm">F</span></span>' : '') + '</td>' +
               '<td><span class="' + deltaClass(fd) + '">' + signed(fd) + '</span> <span class="dim hide-sm">' + x.fmtAfter + '</span>' +
                 ' <span class="tag hide-sm">' + m.format.charAt(0) + '</span></td>' +
               '<td class="hide-sm"><span class="' + deltaClass(ed) + '">' + signed(ed) + '</span> <span class="dim hide-sm">' + x.eteAfter + '</span></td></tr>';
           }).join("") + '</tbody></table>';
+        document.getElementById("dateSort").addEventListener("click", () => { newestFirst = !newestFirst; drawHistory(); });
       }
+
+      function drawH2H() { document.getElementById("h2h").innerHTML = h2hTable(); }
 
       function h2hTable() {
         const by = {};
@@ -105,7 +112,10 @@
           const o = by[x.opp] || (by[x.opp] = { id: x.opp, n: 0, W: 0, L: 0, D: 0, gw: 0, gl: 0 });
           o.n++; o[x.result]++; o.gw += x.my; o.gl += x.their;
         });
-        const list = Object.values(by).sort((a, b) => b.n - a.n || (names[a.id] || a.id).localeCompare(names[b.id] || b.id));
+        const list = Object.values(by)
+          .filter(o => !h2hQuery || o.id.toLowerCase().includes(h2hQuery) || (names[o.id] || "").toLowerCase().includes(h2hQuery))
+          .sort((a, b) => b.n - a.n || (names[a.id] || a.id).localeCompare(names[b.id] || b.id));
+        if (!list.length) return '<div class="notice">No opponents match “' + esc(h2hQuery) + '”.</div>';
         return '<table><thead><tr><th class="l">Opponent</th><th>Played</th><th>W</th><th>L</th><th>D</th><th class="hide-sm">Games</th></tr></thead><tbody>' +
           list.map(o => '<tr><td class="l name"><a href="' + playerUrl(o.id) + '">' + esc(names[o.id] || o.id) + '</a></td>' +
             '<td>' + o.n + '</td><td class="up">' + o.W + '</td><td class="down">' + o.L + '</td><td class="' + (o.D ? '' : 'zero') + '">' + o.D + '</td>' +
