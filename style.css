@@ -150,6 +150,12 @@ td.event { max-width: 190px; overflow: hidden; text-overflow: ellipsis; color: v
   .rank { min-width: 24px; height: 24px; }
   th { font-size: 0.68rem; letter-spacing: 0.03em; }
   input.search { width: 100%; }
+
+  .search-tip {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 6px 0 0 12px;
+}
   .controls { flex-direction: column; align-items: stretch; }
   .seg { align-self: flex-start; }
 }
