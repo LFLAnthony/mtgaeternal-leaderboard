@@ -157,6 +157,6 @@ td.event { max-width: 190px; overflow: hidden; text-overflow: ellipsis; color: v
 
   .search-tip {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.65rem;
   margin: 6px 0 0 12px;
 }
