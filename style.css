@@ -160,3 +160,14 @@ td.event { max-width: 190px; overflow: hidden; text-overflow: ellipsis; color: v
   font-size: 0.65rem;
   margin: 6px 0 0 12px;
 }
+
+.discord {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+}
+.discord a {
+  color: var(--accent);
+}
+.discord a:hover {
+  text-decoration: underline;
+}
